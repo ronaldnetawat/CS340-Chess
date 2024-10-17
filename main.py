@@ -1,3 +1,5 @@
+import copy
+
 class ChessPiece: # parent class for chess pieces
     def __init__(self, color):
         self.color = color
@@ -151,12 +153,12 @@ class ChessBoard:
         self.en_passant_target = None
 
     def initialize_board(self):
-        # Set up pawns
+        # Set up  the pawns
         for col in range(8):
             self.board[1][col] = Pawn('white')
             self.board[6][col] = Pawn('black')
 
-        # Set up other pieces
+        # set the other pieces
         piece_order = [Rook, Knight, Bishop, Queen, King, Bishop, Knight, Rook]
         for col in range(8):
             self.board[0][col] = piece_order[col]('white')
@@ -187,7 +189,7 @@ class ChessBoard:
             return False
 
         # Check if the move puts the player in check
-        temp_board = [row[:] for row in self.board]
+        temp_board = copy.deepcopy(self.board)
         temp_board[end_row][end_col] = piece
         temp_board[start_row][start_col] = None
         if self.is_in_check(piece.color, temp_board):
@@ -261,7 +263,7 @@ class ChessBoard:
                 piece = self.board[row][col]
                 if piece and piece.color == color:
                     for move in piece.valid_moves(self.board, row, col):
-                        temp_board = [r[:] for r in self.board]
+                        temp_board = copy.deepcopy(self.board)
                         temp_board[move[0]][move[1]] = piece
                         temp_board[row][col] = None
                         if not self.is_in_check(color, temp_board):
@@ -278,14 +280,85 @@ class ChessBoard:
                 piece = self.board[row][col]
                 if piece and piece.color == color:
                     for move in piece.valid_moves(self.board, row, col):
-                        temp_board = [r[:] for r in self.board]
+                        temp_board = copy.deepcopy(self.board)
                         temp_board[move[0]][move[1]] = piece
                         temp_board[row][col] = None
                         if not self.is_in_check(color, temp_board):
                             return False
         return True
 
-# main game loop
+    def get_all_pieces(self, color):
+        pieces = []
+        for row in range(8):
+            for col in range(8):
+                piece = self.board[row][col]
+                if piece and piece.color == color:
+                    pieces.append((piece, (row,col)))
+        return pieces
+
+
+# Evaluation Function
+def evaluate_board(board):
+    score = 0
+    piece_values = {'P': 1, 'N': 3, 'B': 3, 'R' : 5, 'Q': 9, 'K' : 0}
+    for row in range(8):
+        for col in range(8):
+            piece = board[row][col]
+            if piece:
+                value = piece_values[str(piece).upper()]
+                if piece.color == 'white':
+                    score = score + value
+                else:
+                    score -= value
+    
+    return score
+
+# writing the minimax function
+def minimax(board, depth, maximizing_player):
+    if depth == 0:
+        return evaluate_board(board.board)
+    
+    if maximizing_player:
+        max_eval = float('-inf')
+        for piece, (row, col) in board.get_all_pieces('white'):
+            for move in piece.valid_moves(board.board, row, col):
+                new_board = copy.deepcopy(board)
+                if new_board.move_piece((row, col), move):
+                    evaluation = minimax(new_board, depth - 1, False)
+                    max_eval = max(max_eval, evaluation)
+        return max_eval
+    else:
+        min_eval = float('inf')
+        for piece, (row, col) in board.get_all_pieces('black'):
+            for move in piece.valid_moves(board.board, row, col):
+                new_board = copy.deepcopy(board)
+                if new_board.move_piece((row, col), move):
+                    evaluation = minimax(new_board, depth - 1, True)
+                    min_eval = min(min_eval, evaluation)
+        return min_eval
+
+
+# the chess bot class
+class ChessBot:
+    def __init__(self, color, depth):
+        self.color = color
+        self.depth = depth
+    
+    def choose_move(self, board):
+        best_move = None
+        best_score = float('-inf') if self.color == 'white' else float('inf')
+        
+        for piece, (row, col) in board.get_all_pieces(self.color):
+            for move in piece.valid_moves(board.board, row, col):
+                new_board = copy.deepcopy(board)
+                if new_board.move_piece((row, col), move):
+                    score = minimax(new_board, self.depth - 1, self.color == 'black')
+                    if (self.color == 'white' and score > best_score) or (self.color == 'black' and score < best_score):
+                        best_score = score
+                        best_move = ((row, col), move)
+        return best_move
+
+# P v P game loop
 def play_chess():
     board = ChessBoard()
     current_player = 'white'
@@ -313,5 +386,40 @@ def play_chess():
         else:
             print("Invalid move. Try again.")
 
+
+# chess bot game loop
+def play_chess_with_ai():
+    board = ChessBoard()
+    bot_player = ChessBot('black', depth=3)
+    current_player = 'white'
+
+    while True:
+        board.print_board()
+        print(f"{current_player.capitalize()}'s turn")
+        
+        if board.is_in_check(current_player):
+            print(f"{current_player.capitalize()} is in check!")
+            if board.is_checkmate(current_player):
+                print(f"Checkmate! {current_player.capitalize()} loses.")
+                break
+        elif board.is_stalemate(current_player):
+            print("Stalemate! The game is a draw.")
+            break
+
+        if current_player == 'white':
+            move = input("Enter your move (e.g., 'e2 e4'): ")
+            start, end = move.split()
+            start = (int(start[1]) - 1, ord(start[0]) - ord('a'))
+            end = (int(end[1]) - 1, ord(end[0]) - ord('a'))
+        else:
+            start, end = bot_player.choose_move(board)
+            print(f"Bot's move: {chr(start[1] + ord('a'))}{start[0] + 1} {chr(end[1] + ord('a'))}{end[0] + 1}")
+
+        if board.move_piece(start, end):
+            current_player = 'black' if current_player == 'white' else 'white'
+        else:
+            print("Invalid move. Try again.")
+
+
 if __name__ == "__main__":
-    play_chess()
+    play_chess_with_ai()
